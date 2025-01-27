@@ -1,0 +1,349 @@
+---
+title: "figure_assignment"
+author: "Sihan Yang"
+format: pdf
+editor: visual
+---
+
+## Original Paper
+
+-   link
+
+    -   paper: <https://www.pnas.org/doi/10.1073/pnas.2322819121>
+
+    -   data and code: <https://osf.io/eugjd/>
+
+-   introduction
+
+-   main figure
+
+    ```{r}
+    knitr::include_graphics("paper/fig01.jpg")
+    ```
+
+    -   explanation
+
+    -   strengths
+
+        -   has provided the essential information about the main hypothesis
+
+    -   weakness
+
+        -   not showing the distribution.
+
+        -   not color-blindness or black-and-white printing friendly
+
+        -   confusing labels
+
+        -   redundant title
+
+        -   the overall balance of size of different components and the layout is not pretty
+
+        -   the zero line could be further stressed so that it will be easier to tell whether it's increasing or decreasing
+
+## Reproduction of Main Figures
+
+### Dara Preprocessing
+
+While the authors have provided the preprocessed data for further analysis in R, here we started with the raw data to examine whether their data are processed correctly. (Since the raw empathy inference response are not provided, we will use directly used the accuracy metrics (Pearson correlation score and RMSE) provided by the authors).
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+
+data_path <- 'data/N709_EmpathicAccuracyTaskDat.csv'
+loaded <- read.csv(data_path)
+
+```
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# get rid of redundant columns
+cleared_loaded <- loaded |>
+  select(obsID, movie, gender, age, obsRace, Ideology, SES,
+         stimID, stimRace, storyteller_label_attn_check, cond, visit, EAcorr, EArmse,
+         compassion, RemoveMisLabeled1)
+
+# remove those with missing data
+cleared_loaded <- cleared_loaded |> 
+  filter(!RemoveMisLabeled1)
+cleared_loaded <- cleared_loaded |> select(-RemoveMisLabeled1)
+```
+
+Separate the subject's empathy data and other data
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+subject_info <- cleared_loaded |>
+  select(obsID, movie, gender, age, obsRace, Ideology, SES) |>
+  distinct(obsID, .keep_all = TRUE)
+
+survey_data <- cleared_loaded |>
+  select(obsID, stimID, storyteller_label_attn_check, cond, visit, EAcorr, EArmse, compassion)
+
+head(subject_info)
+```
+
+Compute each subjects' average inference accuracy and compassion in two visits
+
+```{r echo=TRUE}
+empathy_collapsed <- survey_data |>
+  drop_na() |>
+  group_by(obsID, visit, storyteller_label_attn_check) |>
+  summarize (
+    compassion = mean(compassion, na.rm=TRUE),
+    EAcorr=mean(EAcorr, na.rm=TRUE),
+    EArmse=mean(EArmse, na.rm=TRUE)
+  ) |> ungroup()
+
+# leave out those who do not have both types of story-teller in both visits
+# i.e. visit 1/2 x story-telley prisonser/student
+empathy_collapsed <- empathy_collapsed |>
+  group_by(obsID) |>
+  filter(n() == 4)  |>
+  ungroup()
+
+nrow(empathy_collapsed)
+head(empathy_collapsed)
+  
+```
+
+### Fitting
+
+Examine how the interaction between time point (i.e. 'visit'), the condition (i.e. 'cond', what type movie people watch between two surveys) and label (i.e. whether the story teller is labeled as 'formerly incarcerated' or 'student') affect RMSE score (as in the original paper). Here we closely follow how the original study code categorical data.
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+library(lmerTest)
+library(broom.mixed)
+
+# combine all info, and rename some columns to prepare for fititng
+fitting_table <- subject_info |>
+  inner_join(empathy_collapsed, by='obsID') |>
+  mutate(visit = case_when(
+    visit == 1 ~ "pre",
+    visit == 2 ~ "post",
+  )) |>
+  mutate(
+    cond = if_else(movie == "Just Mercy", "intervention", "control")
+  ) |>
+  rename(storyteller_label=storyteller_label_attn_check)
+
+# remove any with nan
+fitting_table <- fitting_table |>
+  drop_na()
+
+# further clean up (e.g. some of more than one race --> more)
+possible_races <- c("White", "Asian", "Hispanic or Latino", "Black or African American", "Native")
+fitting_table <- fitting_table |>
+  mutate(
+    obsRace = if_else(obsRace %in% possible_races, obsRace, "More")
+  ) |>
+  mutate(
+    gender = if_else(gender == "nonbinary", "other", gender)
+  )
+
+# convert some columns to categories
+cols_to_factorize <- c("obsID", "gender", "obsRace", "Ideology", "SES")
+fitting_table <- fitting_table |>
+  mutate(across(all_of(cols_to_factorize), as.factor)) |>
+  mutate(cond=factor(cond, levels=c("control", "intervention"))) |>
+  mutate(visit=factor(visit, levels=c("pre", "post"))) |>
+  mutate(storyteller_label=factor(storyteller_label, levels=c("Student", "Formerly Incarcerated")))
+
+# apply contrasts
+contrasts(fitting_table$cond) = contr.poly(2)
+contrasts(fitting_table$visit) = contr.poly(2)
+contrasts(fitting_table$storyteller_label) = contr.poly(2)
+contrasts(fitting_table$obsRace) = contr.poly(6)
+contrasts(fitting_table$gender) = contr.poly(3)
+contrasts(fitting_table$Ideology) = contr.poly(4)
+contrasts(fitting_table$SES) = contr.poly(10)
+
+# fit full lme model ()
+rmse_fit_model <- lmer(
+  EArmse ~ cond* storyteller_label * visit 
+  + (1|obsID) + obsRace + gender + Ideology + SES,
+  data=fitting_table)
+rmse_fit_result <- tidy(rmse_fit_model, effects = "fixed", conf.int = TRUE)
+```
+
+```{r}
+rmse_fit_result |> mutate(across(where(is.double), ~round(., 4)))
+```
+
+Check the main interaction
+
+-   Label: storyteller label (s: student; p: former prisoner)
+
+-   Condition: whether subject was assigned to intervention (i: intervention; c: control)
+
+-   Time: whether the survey was done before or after watching a film (1: before; 2: after)
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+mapping <- c(
+  "(Intercept)" = "Intercept",
+  "visit.L" = "Time",
+  "cond.L" = "Condition",
+  "storyteller_label.L" = "Label",
+  "cond.L:visit.L" = "Time*Condition",
+  "cond.L:storyteller_label.L" = "Condition*Label",
+  "storyteller_label.L:visit.L" = "Time*Label",
+  "cond.L:storyteller_label.L:visit.L"="Time*Condition*Label"
+)
+
+# Filter and map terms
+selected_result <- rmse_fit_result |>
+  filter(term %in% names(mapping)) |>
+  mutate(term = recode(term, !!!mapping)) |>
+  mutate(across(where(is.double), ~ round(., 3))) # easier to check
+selected_result
+```
+
+However...Also the original study does not adjust their p-value...
+
+### Visualization
+
+First compute how people emotion inference accuracy and compassion changed after watching the film
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# first compute how rating changes before and after watching a film
+ea_change_table <- empathy_collapsed |>
+  inner_join(subject_info |> select(obsID, movie), by="obsID") |>
+  pivot_wider(
+    names_from = visit,
+    values_from = c(compassion, EArmse, EAcorr)
+  ) |> 
+  mutate(
+    compassion_diff = compassion_2 - compassion_1,
+    corr_diff = EAcorr_2 - EAcorr_1,
+    rmse_diff = EArmse_2 - EArmse_1
+  ) |> mutate(
+    acc_corr_diff = corr_diff,
+    acc_rmse_diff = -rmse_diff
+  ) |> mutate (
+    cond = if_else(movie == "Just Mercy", "intervention", "control")
+  ) |>
+  select(obsID, cond, storyteller_label_attn_check, compassion_diff, acc_corr_diff, acc_rmse_diff)
+```
+
+### T-test
+
+A fast test of whether RMSE, correlation and compasion significantly increase or decrease, which is one of the important hypothesis to test.
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+test_increase_decrease <- function(data, col) {
+  ttest <- t.test(data[[col]], mu=0);
+  result <- tibble(
+    mean = mean(data[[col]], na.rm = TRUE),
+    t_stat = ttest$statistic,
+    p_value = ttest$p.value,
+    conf_low = ttest$conf.int[1],
+    conf_high = ttest$conf.int[2]
+  )
+  result
+} 
+```
+
+-   RMSE
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# Test differences for each storyteller_label
+rmse_ttests <- ea_change_table |>
+  group_by(storyteller_label_attn_check, cond) |>
+  summarise(
+    test_results = list(test_increase_decrease(cur_data(), "acc_rmse_diff"))
+  ) |> 
+  unnest(test_results) |>
+  mutate(across(where(is.double), ~ round(., 3)))
+rmse_ttests
+```
+
+The result suggests that emotion inference accuracy (measured by RMSE) change only significantly when story teller is labeled as 'Formerly Incarcerated' and the movie watched between the two surveys is the intervention one ('Just Mercy').
+
+-   CORR
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# Test differences for each storyteller_label
+corr_ttests <- ea_change_table |>
+  group_by(storyteller_label_attn_check, cond) |>
+  summarise(
+    test_results = list(test_increase_decrease(cur_data(), "acc_corr_diff"))
+  ) |> 
+  unnest(test_results) |>
+  mutate(across(where(is.double), ~ round(., 3)))
+
+print(corr_ttests)
+```
+
+Interestingly, the effect disappeared if instead pearson correlation is used to measure emotion inference accuracy
+
+-   Compassion
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# Test differences for each storyteller_label
+compassion_ttests <- ea_change_table |>
+  group_by(storyteller_label_attn_check, cond) |>
+  summarise(
+    test_results = list(test_increase_decrease(cur_data(), "compassion_diff"))
+  ) |> 
+  unnest(test_results) |>
+  mutate(across(where(is.double), ~ round(., 3)))
+compassion_ttests
+```
+
+Compassion overall decreases significantly in the second survey, regardless of number of the label of story-teller and the type of movies watched.
+
+Finally, test whether there are group differences by two-sample ttest
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+former_incarcerated <- ea_change_table |>
+  filter(storyteller_label_attn_check == 'Formerly Incarcerated')
+
+rmse_compare_ttest <- t.test(acc_rmse_diff ~ cond, data = former_incarcerated)
+print(rmse_compare_ttest)
+compassion_compare_ttest <- t.test(compassion_diff ~ cond, data = former_incarcerated)
+print(compassion_compare_ttest)
+```
+
+This suggests intervention only brings a significant difference for empathy but not compassion for former prisoner.
+
+### Replicate figure 1
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(ggsignif)
+library(viridis)
+
+
+ggplot(former_incarcerated, aes(x = cond, y = acc_rmse_diff, fill = cond)) +
+  geom_violin(trim = FALSE, alpha = 0.3, width=0.7, color=NA) +
+  stat_summary(fun.data = mean_sdl, geom = "crossbar", , fun.args=list(mult=1), width = 0.15, alpha=0.4, size=0.1) +
+  geom_signif(comparisons = list(c("control", "intervention")), map_signif_level = TRUE, textsize=3) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color="#009E73", size = 0.8) +
+  labs(title = "Empathy Change", x = "", y = "Empathic Accuracy Change") +
+  scale_fill_viridis_d(option="viridis") +
+  theme_minimal() +
+  theme(
+    legend.position="none",
+    aspect.ratio=1.6,
+    plot.title=element_text(size=16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 10, face = "bold")
+  ) +
+  theme(legend.position = "none")
+```
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+
+ggplot(former_incarcerated, aes(x = cond, y = compassion_diff, fill = cond)) +
+  geom_violin(trim = FALSE, alpha = 0.3, width=0.7, color=NA) +
+  stat_summary(fun.data = mean_sdl, geom = "crossbar", , fun.args=list(mult=1), width = 0.15, alpha=0.4, size=0.1) +
+  geom_signif(comparisons = list(c("control", "intervention")), map_signif_level = TRUE, textsize = 3) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color="#009E73", size = 0.8) +
+  labs(title = "Compassion Change", x = "", y = "Compassion Rating Change") +
+  scale_fill_viridis_d(option="viridis") +
+  theme_minimal() +
+  theme(
+    legend.position="none",
+    aspect.ratio=1.6,
+    plot.title=element_text(size=16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 10, face = "bold")
+  ) +
+  theme(legend.position = "none")
+```
