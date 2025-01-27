@@ -306,7 +306,7 @@ This suggests intervention only brings a significant difference for empathy but 
 
 ### Replicate figure 1
 
-```{r, echo=TRUE, warning=FALSE, message=FALSE}
+```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.align="center"}
 library(ggplot2)
 library(ggsignif)
 library(viridis)
@@ -329,7 +329,7 @@ ggplot(former_incarcerated, aes(x = cond, y = acc_rmse_diff, fill = cond)) +
   theme(legend.position = "none")
 ```
 
-```{r, echo=TRUE, warning=FALSE, message=FALSE}
+```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.align="center"}
 
 ggplot(former_incarcerated, aes(x = cond, y = compassion_diff, fill = cond)) +
   geom_violin(trim = FALSE, alpha = 0.3, width=0.7, color=NA) +
