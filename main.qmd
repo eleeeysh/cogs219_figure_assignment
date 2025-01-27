@@ -17,7 +17,7 @@ editor: visual
 
 -   main figure
 
-    ```{r}
+    ```{r, out.width="50%", fig.align="center"}
     knitr::include_graphics("paper/fig01.jpg")
     ```
 
