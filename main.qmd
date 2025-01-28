@@ -1,45 +1,50 @@
 ---
-title: "figure_assignment"
+title: "Figure Assignment (COGS219)"
 author: "Sihan Yang"
-format: pdf
+format:
+  pdf: default
 editor: visual
 ---
 
-## Original Paper
+## Original Study
 
--   link
+-   Link
 
-    -   paper: <https://www.pnas.org/doi/10.1073/pnas.2322819121>
+    -   paper: [Film intervention increases empathic understanding of formerly incarcerated people and support for criminal justice reform](https://www.pnas.org/doi/10.1073/pnas.2322819121){.uri}
 
     -   data and code: <https://osf.io/eugjd/>
 
--   introduction
+-   Introduction:
 
--   main figure
+    -   This study investigated whether watching a movie about prison and justice could significantly improve people's empathy and compassion toward the formerly incarcerated. During the study, participants completed the task in which they watched videos of individuals sharing their emotional life stories and rated the storyteller's emotions at each moment across two visits. The storytellers in the videos were all formerly incarcerated individuals, but they were presented to participants with a randomized label—either "student" or "formerly incarcerated." Between the two visits, participants were assigned to watch one films: either Just Mercy, a movie about a lawyer fighting for justice for an innocent man sentenced to death, or other control movies. Therefore, the primary question was whether the storyteller's label and the type of movie viewed between visits influence participants' empathic inference accuracy and compassion.
+
+-   Main figure: fig 1 from the paper
 
     ```{r, out.width="50%", fig.align="center"}
     knitr::include_graphics("paper/fig01.jpg")
     ```
 
-    -   explanation
+    -   Explanation:
 
-    -   strengths
+        -   The original caption from the paper: 'Changes in empathic accuracy and compassion toward formerly incarcerated storytellers after film intervention. (*A*) Empathic accuracy increases in the intervention group only. Participants in the intervention group (N = 327), relative to the control group (N = 382), demonstrated an increase in their ability to accurately infer the feelings of formerly incarcerated people during the empathic accuracy task after watching the film (*P* \< 0.001). Empathic accuracy was measured by taking the RMSE between participant inference ratings and the storyteller’s self-ratings. Plotted are average (post–pre) change scores in RMSE for video trails where storytellers were labeled “formerly incarcerated.” For plotting purposes, we inverted the RMSE change scores so that positive values indicate greater accuracy. (*B*) No change in compassion. There are no group differences in the change in compassion for formerly incarcerated storytellers. Plotted are average (post–pre) change scores in compassion for video trials where storytellers were labeled “formerly incarcerated.” Bars indicate the two groups (intervention and control). All data are represented in box plots where the median is a black line and the upper and lower “whiskers” represent the bounds of the quartiles.'
 
-        -   has provided the essential information about the main hypothesis
+    -   Strengths
 
-    -   weakness
+        -   Has provided the essential information about the main result: the plot has shown and compared the average rating changes across two visits in each condition (with or without intervention). It has also shown whether there are significant difference between two conditions. This is sufficient for the readers to capture the main conclusion.
 
-        -   not showing the distribution.
+    -   Weakness
 
-        -   not color-blindness or black-and-white printing friendly
+        -   Not showing the distribution: it is not clear what is the distribution of rating change
 
-        -   confusing labels
+        -   Not color-blindness or black-and-white printing friendly: the plot uses the default blue and orange color in matlab, which is not the optimal choices in many cases
 
-        -   redundant title
+        -   Confusing labels: the y label is 'empathic accuracy' and 'compassion ratings', but according to their paper these are actually the difference of these values across two visits, which are quite different.
 
-        -   the overall balance of size of different components and the layout is not pretty
+        -   The overall balance of size of different components and the layout is not pretty. (this is very subjective)
 
-        -   the zero line could be further stressed so that it will be easier to tell whether it's increasing or decreasing
+        -   The author has their own concern for flipping 'increase' and 'decrease' for the compassion plot, but it only makes the plot less intuitive to the readers.
+
+        -   The zero line could be further stressed so that it will be easier to tell whether the values are increasing (above 0) or decreasing (below 0).
 
 ## Reproduction of Main Figures
 
@@ -59,13 +64,14 @@ loaded <- read.csv(data_path)
 # get rid of redundant columns
 cleared_loaded <- loaded |>
   select(obsID, movie, gender, age, obsRace, Ideology, SES,
-         stimID, stimRace, storyteller_label_attn_check, cond, visit, EAcorr, EArmse,
-         compassion, RemoveMisLabeled1)
+         stimID, stimRace, storyteller_label_attn_check, cond, visit, 
+         EAcorr, EArmse, compassion, RemoveMisLabeled1)
 
 # remove those with missing data
 cleared_loaded <- cleared_loaded |> 
   filter(!RemoveMisLabeled1)
-cleared_loaded <- cleared_loaded |> select(-RemoveMisLabeled1)
+cleared_loaded <- cleared_loaded |> 
+  select(-RemoveMisLabeled1)
 ```
 
 Separate the subject's empathy data and other data
@@ -76,7 +82,9 @@ subject_info <- cleared_loaded |>
   distinct(obsID, .keep_all = TRUE)
 
 survey_data <- cleared_loaded |>
-  select(obsID, stimID, storyteller_label_attn_check, cond, visit, EAcorr, EArmse, compassion)
+  select(
+    obsID, stimID, storyteller_label_attn_check, 
+    cond, visit, EAcorr, EArmse, compassion)
 
 head(subject_info)
 ```
@@ -130,7 +138,9 @@ fitting_table <- fitting_table |>
   drop_na()
 
 # further clean up (e.g. some of more than one race --> more)
-possible_races <- c("White", "Asian", "Hispanic or Latino", "Black or African American", "Native")
+possible_races <- c(
+  "White", "Asian", "Hispanic or Latino", 
+  "Black or African American", "Native")
 fitting_table <- fitting_table |>
   mutate(
     obsRace = if_else(obsRace %in% possible_races, obsRace, "More")
@@ -140,12 +150,15 @@ fitting_table <- fitting_table |>
   )
 
 # convert some columns to categories
-cols_to_factorize <- c("obsID", "gender", "obsRace", "Ideology", "SES")
+cols_to_factorize <- c(
+  "obsID", "gender", "obsRace", "Ideology", "SES")
 fitting_table <- fitting_table |>
   mutate(across(all_of(cols_to_factorize), as.factor)) |>
   mutate(cond=factor(cond, levels=c("control", "intervention"))) |>
   mutate(visit=factor(visit, levels=c("pre", "post"))) |>
-  mutate(storyteller_label=factor(storyteller_label, levels=c("Student", "Formerly Incarcerated")))
+  mutate(
+    storyteller_label=factor(
+      storyteller_label, levels=c("Student", "Formerly Incarcerated")))
 
 # apply contrasts
 contrasts(fitting_table$cond) = contr.poly(2)
@@ -220,7 +233,9 @@ ea_change_table <- empathy_collapsed |>
   ) |> mutate (
     cond = if_else(movie == "Just Mercy", "intervention", "control")
   ) |>
-  select(obsID, cond, storyteller_label_attn_check, compassion_diff, acc_corr_diff, acc_rmse_diff)
+  select(
+    obsID, cond, storyteller_label_attn_check, 
+    compassion_diff, acc_corr_diff, acc_rmse_diff)
 ```
 
 ### T-test
@@ -296,9 +311,12 @@ Finally, test whether there are group differences by two-sample ttest
 former_incarcerated <- ea_change_table |>
   filter(storyteller_label_attn_check == 'Formerly Incarcerated')
 
-rmse_compare_ttest <- t.test(acc_rmse_diff ~ cond, data = former_incarcerated)
+rmse_compare_ttest <- t.test(
+  acc_rmse_diff ~ cond, data = former_incarcerated)
 print(rmse_compare_ttest)
-compassion_compare_ttest <- t.test(compassion_diff ~ cond, data = former_incarcerated)
+
+compassion_compare_ttest <- t.test(
+  compassion_diff ~ cond, data = former_incarcerated)
 print(compassion_compare_ttest)
 ```
 
@@ -309,41 +327,88 @@ This suggests intervention only brings a significant difference for empathy but 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.align="center"}
 library(ggplot2)
 library(ggsignif)
+library(gridExtra)
 library(viridis)
 
-
-ggplot(former_incarcerated, aes(x = cond, y = acc_rmse_diff, fill = cond)) +
-  geom_violin(trim = FALSE, alpha = 0.3, width=0.7, color=NA) +
-  stat_summary(fun.data = mean_sdl, geom = "crossbar", , fun.args=list(mult=1), width = 0.15, alpha=0.4, size=0.1) +
-  geom_signif(comparisons = list(c("control", "intervention")), map_signif_level = TRUE, textsize=3) + 
-  geom_hline(yintercept = 0, linetype = "dashed", color="#009E73", size = 0.8) +
-  labs(title = "Empathy Change", x = "", y = "Empathic Accuracy Change") +
+pltA <- ggplot(
+    former_incarcerated, 
+    aes(x = cond, y = acc_rmse_diff, fill = cond)) +
+  geom_violin(
+    trim = FALSE, alpha = 0.3, width=0.7, color=NA) +
+  stat_summary(
+    fun.data = mean_sdl, geom = "crossbar", fun.args=list(mult=1), 
+    width = 0.15, alpha=0.4, size=0.1) +
+  geom_signif(
+    comparisons = list(c("control", "intervention")), 
+    map_signif_level = TRUE, textsize=3) + 
+  geom_hline(
+    yintercept = 0, linetype = "dashed", color="#009E73", size = 0.8) +
+  labs(
+    title = "A: empathy increases in\n intervention group only.", 
+    x = "", y = "Empathic Accuracy Change") +
   scale_fill_viridis_d(option="viridis") +
   theme_minimal() +
   theme(
     legend.position="none",
     aspect.ratio=1.6,
-    plot.title=element_text(size=16, face = "bold", hjust = 0.5),
+    plot.title=element_text(size=14, face = "bold", hjust = 0.5),
     axis.text.x = element_text(size = 10, face = "bold")
   ) +
   theme(legend.position = "none")
-```
 
-```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.align="center"}
-
-ggplot(former_incarcerated, aes(x = cond, y = compassion_diff, fill = cond)) +
+pltB <- ggplot(
+    former_incarcerated, 
+    aes(x = cond, y = compassion_diff, fill = cond)) +
   geom_violin(trim = FALSE, alpha = 0.3, width=0.7, color=NA) +
-  stat_summary(fun.data = mean_sdl, geom = "crossbar", , fun.args=list(mult=1), width = 0.15, alpha=0.4, size=0.1) +
-  geom_signif(comparisons = list(c("control", "intervention")), map_signif_level = TRUE, textsize = 3) + 
-  geom_hline(yintercept = 0, linetype = "dashed", color="#009E73", size = 0.8) +
-  labs(title = "Compassion Change", x = "", y = "Compassion Rating Change") +
+  stat_summary(
+    fun.data = mean_sdl, geom = "crossbar", 
+    fun.args=list(mult=1), width = 0.15, alpha=0.4, size=0.1) +
+  geom_signif(
+    comparisons = list(c("control", "intervention")), 
+    map_signif_level = TRUE, textsize = 3) + 
+  geom_hline(
+    yintercept = 0, linetype = "dashed", color="#009E73", size = 0.8) +
+  labs(
+    title = "B: no group difference\n in compassion change", 
+    x = "", y = "Compassion Rating Change") +
   scale_fill_viridis_d(option="viridis") +
   theme_minimal() +
   theme(
     legend.position="none",
     aspect.ratio=1.6,
-    plot.title=element_text(size=16, face = "bold", hjust = 0.5),
+    plot.title=element_text(size=14, face = "bold", hjust = 0.5),
     axis.text.x = element_text(size = 10, face = "bold")
   ) +
   theme(legend.position = "none")
+
+grid.arrange(pltA, pltB, ncol = 2)
+
 ```
+
+Compared to the original figure, the changes we've made include:
+
+\begin{figure}[h]
+\begin{minipage}{0.4\textwidth}
+    \includegraphics[width=\linewidth]{paper/fig01.jpg} % Replace with your image path
+\end{minipage}
+\hspace{0.05\textwidth}
+\begin{minipage}{0.5\textwidth}
+
+- Show the distribution.
+
+- Use color-blindness friendly color palette.
+
+- Fix the y label.
+
+- Change the arrangement and size of different components.
+
+- Flip the y axis for plot B.
+
+- Stree the zero line.  
+
+\end{minipage}%
+\end{figure}
+
+## References
+
+-   M.C. Reddan, S.B. Garcia, G. Golarai, J.L. Eberhardt, J. Zaki, Film intervention increases empathic understanding of formerly incarcerated people and support for criminal justice reform, Proc. Natl. Acad. Sci. U.S.A. 121 (44) e2322819121, <https://doi.org/10.1073/pnas.2322819121> (2024).
